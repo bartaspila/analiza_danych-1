@@ -256,15 +256,36 @@ show_matrix = st.sidebar.checkbox("Scatter matrix", False)
 # =====================
 # Losowe wiersze
 # =====================
+#if show_random and not filtered_df.empty:
+#    st.subheader("🔀 Podgląd losowych wierszy")
+#    n_rows = st.slider(
+#        "Liczba wierszy",
+#        5,
+#        min(50, len(filtered_df)),
+#        value=min(10, len(filtered_df))
+#    )
+#    st.dataframe(filtered_df.sample(n=n_rows, random_state=42), hide_index=True)
+
+# =====================
+# Losowe wiersze
+# =====================
 if show_random and not filtered_df.empty:
     st.subheader("🔀 Podgląd losowych wierszy")
-    n_rows = st.slider(
-        "Liczba wierszy",
-        5,
-        min(50, len(filtered_df)),
-        value=min(10, len(filtered_df))
-    )
-    st.dataframe(filtered_df.sample(n=n_rows, random_state=42), hide_index=True)
+    
+    total_rows = len(filtered_df)
+    
+    # Zabezpieczenie: suwak pojawi się tylko, gdy mamy więcej niż 1 wiersz
+    if total_rows > 1:
+        n_rows = st.slider(
+            "Liczba wierszy",
+            min_value=1, 
+            max_value=min(50, total_rows),
+            value=min(10, total_rows)
+        )
+        st.dataframe(filtered_df.sample(n=n_rows, random_state=42), hide_index=True)
+    else:
+        # Jeśli jest tylko 1 wiersz, po prostu go wyświetlamy bez suwaka
+        st.dataframe(filtered_df, hide_index=True)
 
 # =====================
 # Przygotowanie kolumn
