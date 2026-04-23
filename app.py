@@ -20,62 +20,65 @@ from reportlab.platypus import (
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from reportlab.lib.units import cm
-import base64
-
 # =====================
 # Ustawienia domyślne Plotly
 # =====================
 px.defaults.template = "plotly_white"
 px.defaults.color_discrete_sequence = px.colors.qualitative.Set2
 
+import base64
+
+
+
 # =====================
 # Konfiguracja strony
 # =====================
 st.set_page_config(page_title="Analiza danych- by: Bart", layout="wide")
-
+# --- wczytanie obrazka i zamiana na base64 --- logo w prawym górnym rogu
 def img_to_base64(path):
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode()
 
-try:
-    logo_base64 = img_to_base64("logo.png")
-    st.markdown(
-        f"""
-        <style>
-        .app-logo {{
-            position: fixed;
-            top: 60px;
-            right: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            z-index: 99999;
-            background: white;
-            padding: 6px 10px;
-            border-radius: 8px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-            font-family: "Segoe UI", sans-serif;
-        }}
-        .app-logo img {{
-            height: 28px;
-            width: auto;
-        }}
-        .app-logo span {{
-            font-size: 18px;
-            font-weight: 700;
-            color: #111;
-            white-space: nowrap;
-        }}
-        </style>
-        <div class="app-logo">
-            <img src="data:image/png;base64,{logo_base64}">
-            <span>by: Bart</span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-except Exception:
-    pass
+logo_base64 = img_to_base64("logo.png")  # ← ścieżka do pliku PNG
+
+st.markdown(
+    f"""
+    <style>
+    .app-logo {{
+        position: fixed;
+        top: 60px;
+        right: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        z-index: 99999;
+        background: white;
+        padding: 6px 10px;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        font-family: "Segoe UI", sans-serif;
+    }}
+
+    .app-logo img {{
+        height: 28px;
+        width: auto;
+    }}
+
+    .app-logo span {{
+        font-size: 18px;
+        font-weight: 700;
+        color: #111;
+        white-space: nowrap;
+    }}
+    </style>
+
+    <div class="app-logo">
+        <img src="data:image/png;base64,{logo_base64}">
+        <span>by: Bart</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 st.title("📊 Analiza danych")
 
@@ -125,15 +128,12 @@ def parse_experience(value):
         return round((today - start_date).days / 365.25, 1)
     return None
 
-def load_and_map_file(file, sheet_name=None):
+
+def load_and_map_file(file):
     if file.name.endswith(".csv"):
         df = pd.read_csv(file, sep=None, engine="python")
     elif file.name.endswith((".xls", ".xlsx")):
-        try:
-            df = pd.read_excel(file, sheet_name=sheet_name)
-        except Exception as e:
-            st.error(f"Błąd wczytywania arkusza: {e}")
-            return None
+        df = pd.read_excel(file)
     else:
         st.error(f"Nieobsługiwany format pliku: {file.name}")
         return None
@@ -148,6 +148,7 @@ def load_and_map_file(file, sheet_name=None):
                 break
 
     return df.rename(columns=mapped_cols)
+
 
 @st.cache_data
 def preprocess_data(df):
@@ -166,6 +167,10 @@ def preprocess_data(df):
     if "experience_years" in df.columns and df["experience_years"].notna().any():
         df["experience_years"] = df["experience_years"].apply(parse_experience)
 
+    # for col in ["gender", "edu_level", "industry", "class"]:
+    #     if col not in df.columns:
+    #         df[col] = None
+
     return df
 
 # =====================
@@ -182,32 +187,12 @@ df = None
 if uploaded_files:
     dfs = []
     for file in uploaded_files:
-        if file.name.endswith((".xls", ".xlsx")):
-            try:
-                xl = pd.ExcelFile(file)
-                sheet_names = xl.sheet_names
-                selected_sheets = st.sidebar.multiselect(
-                    f"Wybierz arkusze dla {file.name}",
-                    sheet_names,
-                    default=sheet_names,
-                    key=file.name
-                )
-                for sheet_name in selected_sheets:
-                    part = load_and_map_file(file, sheet_name=sheet_name)
-                    if part is not None:
-                        dfs.append(part)
-            except Exception as e:
-                st.error(f"Błąd pliku {file.name}: {e}")
-                continue
-        else:
-            part = load_and_map_file(file)
-            if part is not None:
-                dfs.append(part)
+        part = load_and_map_file(file)
+        if part is not None:
+            dfs.append(part)
     if dfs:
         df = preprocess_data(pd.concat(dfs, ignore_index=True))
-        st.success(f"Wczytano {len(dfs)} arkuszy/plików, łącznie {df.shape[0]} wierszy")
-    else:
-        st.warning("Nie udało się wczytać żadnych arkuszy.")
+        st.success(f"Wczytano {len(dfs)} plik(y), łącznie {df.shape[0]} wierszy")
 else:
     st.markdown(
         "<div style='text-align:center; padding:40px; font-size:20px;'>"
@@ -238,9 +223,8 @@ for col in df.columns:
     else:
         unique_vals = col_data.dropna().unique().tolist()
         if 2 <= len(unique_vals) <= 30:
-            clean_options = sorted([str(x) for x in unique_vals if pd.notna(x) and str(x).strip() != ""])
-            selected = st.sidebar.multiselect(col, clean_options, clean_options)
-            filters[col] = ("cat", selected, clean_options)
+            selected = st.sidebar.multiselect(col, sorted(unique_vals), unique_vals)
+            filters[col] = ("cat", selected, unique_vals)
 
 for col, cfg in filters.items():
     if cfg[0] == "num":
@@ -272,11 +256,25 @@ show_matrix = st.sidebar.checkbox("Scatter matrix", False)
 # =====================
 # Losowe wiersze
 # =====================
+#if show_random and not filtered_df.empty:
+#    st.subheader("🔀 Podgląd losowych wierszy")
+#    n_rows = st.slider(
+#        "Liczba wierszy",
+#        5,
+#        min(50, len(filtered_df)),
+#        value=min(10, len(filtered_df))
+#    )
+#    st.dataframe(filtered_df.sample(n=n_rows, random_state=42), hide_index=True)
+
+# =====================
+# Losowe wiersze
+# =====================
 if show_random and not filtered_df.empty:
     st.subheader("🔀 Podgląd losowych wierszy")
     
     total_rows = len(filtered_df)
     
+    # Zabezpieczenie: suwak pojawi się tylko, gdy mamy więcej niż 1 wiersz
     if total_rows > 1:
         n_rows = st.slider(
             "Liczba wierszy",
@@ -286,6 +284,7 @@ if show_random and not filtered_df.empty:
         )
         st.dataframe(filtered_df.sample(n=n_rows, random_state=42), hide_index=True)
     else:
+        # Jeśli jest tylko 1 wiersz, po prostu go wyświetlamy bez suwaka
         st.dataframe(filtered_df, hide_index=True)
 
 # =====================
@@ -383,41 +382,145 @@ st.download_button(
     "dane_po_filtrach.xlsx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+# dodano dla kolorów w pdf= ale też nie działa
+# def prepare_fig_for_pdf(fig):
+#     fig_copy = copy.deepcopy(fig)
+#     fig_copy.update_layout(
+#         template="plotly_white",
+#         paper_bgcolor="white",
+#         plot_bgcolor="white",
+#         font=dict(color="black"),
+#         colorway=px.colors.qualitative.Set2
+#     )
+#     return fig_copy
+# ====================
+# Przygotowanie wykresów do HTML
+# ====================
+# def prepare_fig_for_html(fig):
+#     fig = copy.deepcopy(fig)
+#     palette = px.colors.qualitative.Set2
+
+#     fig.update_layout(
+#         template="plotly_white",
+#         paper_bgcolor="white",
+#         plot_bgcolor="white",
+#         font=dict(color="black"),
+#         showlegend=True
+#     )
+
+#     for i, trace in enumerate(fig.data):
+#         color = palette[i % len(palette)]
+
+#         # ===== SCATTER / LINE =====
+#         if trace.type == "scatter":
+#             if trace.mode and "markers" in trace.mode:
+#                 trace.marker.color = color
+#                 trace.marker.opacity = 0.8
+#             if trace.mode and "lines" in trace.mode:
+#                 trace.line.color = color
+
+#         # ===== HISTOGRAM =====
+#         elif trace.type == "histogram":
+#             trace.marker.color = color
+#             trace.marker.line.color = color
+#             trace.marker.opacity = 0.8
+
+#         # ===== BOX / VIOLIN =====
+#         elif trace.type in ("box", "violin"):
+#             trace.fillcolor = color
+#             trace.line.color = color
+
+#         # ===== HEATMAP / IMSHOW =====
+#         elif trace.type in ("heatmap", "imshow"):
+#             trace.colorscale = "RdBu"
+#             trace.showscale = True
+
+#     return fig
+
+# def prepare_fig_for_html(fig):
+#     fig = copy.deepcopy(fig)
+
+#     palette = px.colors.qualitative.Set2
+
+#     fig.update_layout(
+#         template="plotly_white",
+#         paper_bgcolor="white",
+#         plot_bgcolor="white",
+#         font=dict(color="black"),
+#         showlegend=True
+#     )
+
+#     for i, trace in enumerate(fig.data):
+#         color = palette[i % len(palette)]
+
+#         # scatter, bar, histogram, box, violin
+#         if hasattr(trace, "marker") and trace.marker is not None:
+#             trace.marker.color = color
+#             trace.marker.opacity = 0.8
+
+#         # linie
+#         if hasattr(trace, "line") and trace.line is not None:
+#             trace.line.color = color
+
+#         # heatmap / imshow
+#         if trace.type in ("heatmap", "imshow"):
+#             trace.colorscale = "RdBu"
+#             trace.showscale = True
+
+#     return fig
+
+
 
 # ====================
 # Przygotowanie wykresów do PDF
 # ====================
+
 def prepare_fig_for_pdf(fig):
     fig_copy = copy.deepcopy(fig)
+
+    # Jawna paleta (kolorowa, stabilna)
     palette = pc.qualitative.Plotly
+
+    # Ustaw tło
     fig_copy.update_layout(
         paper_bgcolor="white",
         plot_bgcolor="white",
         font=dict(color="black"),
         showlegend=True
     )
+
+    # === WYMUSZENIE KOLORÓW NA KAŻDYM TRACE ===
     for i, trace in enumerate(fig_copy.data):
         color = palette[i % len(palette)]
+
         if hasattr(trace, "marker"):
             trace.marker.color = color
+
         if hasattr(trace, "line"):
             trace.line.color = color
+
         if trace.type in ["heatmap", "imshow"]:
             trace.colorscale = "RdBu"
-    return fig_copy
 
+    return fig_copy
 # ====================
 # HTML – GENEROWANY AUTOMATYCZNIE
-# ====================
+# =====================
 def generate_html_report(df, figs, comments, applied_filters):
+    import plotly.io as pio
+    from datetime import datetime
+
     sections = []
     toc = []
+
+    # === Nagłówek dokumentu ===
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
         <title>Raport danych</title>
+        # === 
         <style>
             body {{ font-family: Arial, sans-serif; margin: 40px; }}
             h1 {{ margin-bottom: 0; }}
@@ -429,8 +532,10 @@ def generate_html_report(df, figs, comments, applied_filters):
     </head>
     <body>
         <h1>Raport danych po filtrach</h1>
-        <div class="meta">Wygenerowano: {dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+        <div class="meta">Wygenerowano: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
     """
+
+    # === Filtry ===
     toc.append("<li><a href='#filters'>Zastosowane filtry</a></li>")
     filters_html = "<h2 id='filters'>Zastosowane filtry</h2><ul>"
     for col, cfg in applied_filters.items():
@@ -442,29 +547,53 @@ def generate_html_report(df, figs, comments, applied_filters):
             filters_html += f"<li><b>{col}</b>: {', '.join(map(str, sel))}</li>"
     filters_html += "</ul>"
     sections.append(filters_html)
+
+    # === Podgląd danych ===
     toc.append("<li><a href='#table'>Podgląd danych</a></li>")
     sections.append(
         "<h2 id='table'>Podgląd danych (pierwsze 10 wierszy)</h2>" +
         df.head(10).to_html(index=False)
     )
+
+    # === Wykresy ===
     for i, (fig, comment) in enumerate(zip(figs, comments), start=1):
         section_id = f"plot-{i}"
         title = fig.layout.title.text if fig.layout.title.text else f"Wykres {i}"
+
         toc.append(f"<li><a href='#{section_id}'>{title}</a></li>")
+
         fig_html = pio.to_html(
             fig,
             full_html=False,
             include_plotlyjs="cdn",
-            config={"responsive": True, "displayModeBar": True, "scrollZoom": True}
-        )
+            config={
+                "responsive": True,
+                "displayModeBar": True,
+                "scrollZoom": True
+            }
+)
+
+
+
+
+
         section = f"<h2 id='{section_id}'>{title}</h2>{fig_html}"
+
         if comment:
             section += f"<div class='comment'><b>Komentarz:</b><br>{comment}</div>"
+
         sections.append(section)
+
+    # === Spis treści ===
     html += "<h2>Spis treści</h2><ul>" + "".join(toc) + "</ul>"
+
+    # === Treść ===
     html += "".join(sections)
+
     html += "</body></html>"
+
     return html.encode("utf-8")
+
 
 # =====================
 # PDF – GENEROWANY TYLKO NA KLIK
@@ -475,8 +604,10 @@ def generate_pdf(df, figs, comments, applied_filters):
     styles = getSampleStyleSheet()
     story = []
     temp_imgs = []
+
     story.append(Paragraph("Raport danych po filtrach", styles["Title"]))
     story.append(Spacer(1, 12))
+
     story.append(Paragraph("Zastosowane filtry:", styles["Heading2"]))
     for col, cfg in applied_filters.items():
         if cfg[0] == "num":
@@ -485,7 +616,9 @@ def generate_pdf(df, figs, comments, applied_filters):
         else:
             _, sel, _ = cfg
             story.append(Paragraph(f"{col}: {', '.join(map(str, sel))}", styles["Normal"]))
+
     story.append(PageBreak())
+
     table_df = df.head(10).astype(str)
     table = Table([table_df.columns.tolist()] + table_df.values.tolist())
     table.setStyle(TableStyle([
@@ -496,33 +629,59 @@ def generate_pdf(df, figs, comments, applied_filters):
     ]))
     story.append(table)
     story.append(PageBreak())
+
     for fig, comment in zip(figs, comments):
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        prepare_fig_for_pdf(fig).write_image(tmp.name, scale=2)
+        prepare_fig_for_pdf(fig).write_image(tmp.name, scale=2) # zmieniona linia        
         tmp.close()
         temp_imgs.append(tmp.name)
+
         story.append(Image(tmp.name, width=16*cm, height=9*cm))
         if comment:
             story.append(Spacer(1, 6))
             story.append(Paragraph(f"Komentarz: {comment}", styles["Italic"]))
         story.append(PageBreak())
+
     doc.build(story)
+
     for p in temp_imgs:
         try:
             os.remove(p)
         except Exception:
             pass
+
     buffer.seek(0)
     return buffer
 
+
 st.subheader("⬇️ Eksport PDF")
+
 if st.button("📄 Generuj raport PDF"):
     with st.spinner("Generowanie PDF..."):
         pdf_buffer = generate_pdf(filtered_df, plots_for_pdf, comments, filters)
-    st.download_button("📥 Pobierz PDF", pdf_buffer, "raport_danych.pdf", "application/pdf")
 
+    st.download_button(
+        "📥 Pobierz PDF",
+        pdf_buffer,
+        "raport_danych.pdf",
+        "application/pdf"
+    )
 st.subheader("⬇️ Eksport HTML")
+# =====================
+# HTML – GENEROWANY TYLKO NA KLIK
+# =====================
 if st.button("📄 Generuj raport HTML"):
     with st.spinner("Generowanie raportu HTML..."):
-        html_bytes = generate_html_report(filtered_df, plots_for_pdf, comments, filters)
-    st.download_button("📥 Pobierz HTML", html_bytes, "raport_danych.html", "text/html")
+        html_bytes = generate_html_report(
+            filtered_df,
+            plots_for_pdf,
+            comments,
+            filters
+        )
+
+    st.download_button(
+        "📥 Pobierz HTML",
+        html_bytes,
+        "raport_danych.html",
+        "text/html"
+    )
